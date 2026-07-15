@@ -1,0 +1,23 @@
+name: AI Code Reviewer Agent
+
+# El agente despertará automáticamente cada vez que alguien haga un push
+on: [push]
+
+jobs:
+  revision_ia:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Descargar el código
+        # fetch-depth: 2 es crucial. Le dice a GitHub que descargue los últimos 2 commits para poder compararlos con git diff
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: ⚙️ Preparar entorno Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 🤖 Despertar al Agente IA
+        run: node agente.js
