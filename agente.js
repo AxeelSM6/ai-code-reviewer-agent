@@ -1,4 +1,17 @@
-async function listarModelosDisponibles() {
+const { execSync } = require('child_process');
+
+function obtenerCambios() {
+    try {
+        const diferencias = execSync('git diff HEAD~1 HEAD').toString();
+        if (!diferencias) return null;
+        return diferencias;
+    } catch (error) {
+        console.error('Error al intentar leer Git:', error.message);
+        return null;
+    }
+}
+
+async function solicitarRevisionIA(diferencias) {
     const apiKey = process.env.GEMINI_API_KEY;
     
     if (!apiKey) {
@@ -6,33 +19,42 @@ async function listarModelosDisponibles() {
         process.exit(1);
     }
 
-    console.log('\n--- INTERROGANDO A LOS SERVIDORES DE GOOGLE ---');
-    console.log('Obteniendo catálogo de modelos permitidos para esta API Key...\n');
+    console.log('\n--- 1. CONSTRUYENDO EL PROMPT ---');
+    const prompt = `Eres un Lead Security Engineer revisando código. Detecta vulnerabilidades críticas en este diff y responde en 1 o 2 oraciones máximo. Si no hay riesgo, di "El código parece seguro". \n\nCódigo modificado:\n${diferencias}`;
+
+    const payload = {
+        contents: [{ parts: [{ text: prompt }] }]
+    };
+
+    console.log('\n--- 2. ENVIANDO A LA API DE GEMINI ---');
     
     try {
-        // Hacemos una petición GET al endpoint que lista los modelos
-        const respuesta = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        // Usamos exactamente el string de la línea 11 de tu escáner
+        const respuesta = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
         const datos = await respuesta.json();
         
         if (datos.error) {
-            console.error("❌ La API rechazó la consulta. Motivo:");
+            console.error("❌ La API rechazó la petición. Motivo exacto:");
             console.error(JSON.stringify(datos.error, null, 2));
-            return;
+            return; 
         }
         
-        console.log('✅ ESTOS SON LOS MODELOS QUE TU LLAVE PUEDE USAR EXACTAMENTE:');
-        
-        // Filtramos e imprimimos la lista limpia para leerla en la consola
-        datos.models.forEach(modelo => {
-            // Solo imprimimos los que soportan "generateContent" (que es el método que necesitamos)
-            if (modelo.supportedGenerationMethods && modelo.supportedGenerationMethods.includes('generateContent')) {
-                console.log(`- Nombre exacto: ${modelo.name}`);
-            }
-        });
+        console.log('\n✅ RESPUESTA DE LA IA RECIBIDA:');
+        console.log(datos.candidates[0].content.parts[0].text);
         
     } catch (error) {
-        console.error("Error crítico de red:", error);
+        console.error("Error crítico de conexión o código:", error);
     }
 }
 
-listarModelosDisponibles();
+const cambiosPendientes = obtenerCambios();
+if (cambiosPendientes) {
+    solicitarRevisionIA(cambiosPendientes);
+} else {
+    console.log("No hay cambios para revisar.");
+}
