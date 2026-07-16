@@ -30,7 +30,7 @@ async function solicitarRevisionIA(diferencias) {
     
     try {
         // Usamos exactamente el string de la línea 11 de tu escáner
-        const respuesta = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+        const respuesta = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
