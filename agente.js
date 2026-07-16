@@ -1,14 +1,9 @@
 const { execSync } = require('child_process');
 
-// 1. Mantenemos intacto nuestro motor de extracción
 function obtenerCambios() {
     try {
-// HEAD~1 HEAD significa: "Compara el último commit contra el anterior"
-const diferencias = execSync('git diff HEAD~1 HEAD').toString();
-        if (!diferencias) {
-            console.log('No hay cambios nuevos para revisar.');
-            return null;
-        }
+        const diferencias = execSync('git diff HEAD~1 HEAD').toString();
+        if (!diferencias) return null;
         return diferencias;
     } catch (error) {
         console.error('Error al intentar leer Git:', error.message);
@@ -16,38 +11,64 @@ const diferencias = execSync('git diff HEAD~1 HEAD').toString();
     }
 }
 
-// 2. NUEVO: El motor de conexión con la IA
-async function solicitarRevisionIA(diferencias) {
-    console.log('\n--- 1. CONSTRUYENDO EL PROMPT ---');
+async function solicitarRevisionClaude(diferencias) {
+    // 1. Extraemos la nueva llave de la bóveda
+    const apiKey = process.env.ANTHROPIC_API_KEY;
     
-    // Aquí inyectamos dinámicamente los cambios de código en las instrucciones
-    const promptDefinitivo = `Eres un Lead Security Engineer. Revisa este código y detecta vulnerabilidades críticas en 1 sola oración. Código modificado:\n${diferencias}`;
+    if (!apiKey) {
+        console.error("🚨 ERROR FATAL: No se encontró la API Key de Anthropic.");
+        process.exit(1); 
+    }
 
-    // Armamos el JSON con el estándar de la industria (funciona igual para OpenAI, Anthropic o para mí, Gemini)
+    console.log('\n--- 1. PREPARANDO EL PAYLOAD PARA CLAUDE ---');
+    
+    // Estructura oficial requerida por la API de Anthropic (Messages API)
     const payload = {
-        model: "llm-agente-revisor", 
+        model: "claude-3-haiku-20240307",
+        max_tokens: 150, // Límite corto para ahorrar saldo
+        temperature: 0.2,
+        system: "Eres un Lead Security Engineer revisando código. Detecta vulnerabilidades críticas en este diff y responde en 1 o 2 oraciones máximo. Si no hay riesgo, di 'El código parece seguro'.",
         messages: [
-            { role: "system", content: "Eres un revisor de código estricto." },
-            { role: "user", content: promptDefinitivo }
-        ],
-        temperature: 0.2 // Nivel bajo para respuestas técnicas y precisas
+            {
+                role: "user",
+                content: `Código modificado:\n${diferencias}`
+            }
+        ]
     };
 
-    console.log(JSON.stringify(payload, null, 2));
-
-    console.log('\n--- 2. ENVIANDO A LA API (POST) ---');
-    console.log('Esperando respuesta del servidor...');
+    console.log('\n--- 2. ENVIANDO A LA API DE ANTHROPIC ---');
     
-    // Simulamos el tiempo que tarda la IA en procesar (la latencia de red)
-    await new Promise(resolve => setTimeout(resolve, 2500));
+    try {
+        const respuesta = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: { 
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+                'content-type': 'application/json' 
+            },
+            body: JSON.stringify(payload)
+        });
 
-    // Esta es la respuesta que nos devolvería el LLM en la vida real
-    console.log('\n✅ RESPUESTA DE LA IA RECIBIDA:');
-    console.log('"🚨 ALERTA CRÍTICA: Se ha detectado una credencial en texto plano (contrasena = 12345) expuesta en el código fuente. Acción requerida inmediata."');
+        const datos = await respuesta.json();
+
+        // Manejo de errores si la API rechaza la petición
+        if (datos.error) {
+             console.error("❌ Error de Claude:", datos.error.message);
+             return;
+        }
+        
+        console.log('\n✅ RESPUESTA DE CLAUDE RECIBIDA:');
+        // Anthropic devuelve el texto dentro de un arreglo de contenido
+        console.log(datos.content[0].text);
+        
+    } catch (error) {
+        console.error("Error de conexión:", error);
+    }
 }
 
-// 3. Orquestador: Ejecutamos el flujo completo
 const cambiosPendientes = obtenerCambios();
 if (cambiosPendientes) {
-    solicitarRevisionIA(cambiosPendientes);
+    solicitarRevisionClaude(cambiosPendientes);
+} else {
+    console.log("No hay cambios para revisar.");
 }
