@@ -37,14 +37,20 @@ async function solicitarRevisionIA(diferencias) {
 
         const datos = await respuesta.json();
         
+        // NUEVO: El escudo de validación. Si Google manda un error, lo atrapamos aquí.
+        if (datos.error) {
+            console.error("❌ La API de Google rechazó la petición. Motivo exacto:");
+            console.error(JSON.stringify(datos.error, null, 2));
+            return; // Detenemos la ejecución aquí para que no colapse
+        }
+        
         console.log('\n✅ RESPUESTA DE LA IA RECIBIDA:');
         console.log(datos.candidates[0].content.parts[0].text);
         
     } catch (error) {
-        console.error("Error al conectar con la API:", error);
+        console.error("Error crítico de conexión o código:", error);
     }
 }
-
 const cambiosPendientes = obtenerCambios();
 if (cambiosPendientes) {
     solicitarRevisionIA(cambiosPendientes);
